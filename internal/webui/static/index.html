@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- Dark bar, because the page is dark behind it in standalone mode. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="beamdrop">
+<meta name="theme-color" content="#2ea062">
+<link rel="manifest" href="manifest.webmanifest">
+<!-- iOS ignores the manifest icons and will not take an SVG, so the home
+     screen icon has to be a PNG named this way. -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>beamdrop</title>
+<style>
+  :root {
+    --bg: #0c0c0f;
+    --raised: #17171c;
+    --line: #26262e;
+    --text: #ececef;
+    --dim: #8b8b95;
+    --accent: #2ea062;
+    --mine: #1d3d2b;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f8; --raised: #ffffff; --line: #e2e5ea;
+      --text: #1c1e24; --dim: #767d8a; --mine: #e4f5ea;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 15px/1.45 -apple-system, system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+  }
+  header {
+    padding: .6rem 1rem; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: .55rem; background: var(--raised);
+  }
+  header b { font-size: 1rem; }
+  #status { color: var(--dim); font-size: .8rem; margin-left: auto; text-align: right; }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+  #dot.on { background: var(--accent); }
+
+  #feed { flex: 1; overflow-y: auto; padding: .75rem; -webkit-overflow-scrolling: touch; }
+  .row { display: flex; margin: .35rem 0; }
+  .row.mine { justify-content: flex-end; }
+  .card {
+    max-width: 78%; background: var(--raised); border: 1px solid var(--line);
+    border-radius: 14px; padding: .5rem .7rem; overflow: hidden;
+  }
+  .row.mine .card { background: var(--mine); }
+  .card img { display: block; max-width: 100%; border-radius: 8px; margin: -.1rem 0 .35rem; }
+  .card .name { word-break: break-word; }
+  .card .meta { color: var(--dim); font-size: .74rem; margin-top: .15rem; }
+  .card a.save { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .empty { color: var(--dim); text-align: center; margin-top: 3rem; font-size: .9rem; }
+  /* Past items are dimmed so the eye lands on what is new. They are still
+     readable — this is history you came back for, not decoration. */
+  #history .card { opacity: .72; }
+  #history .card.fetchable { opacity: .85; }
+  .card .get {
+    width: auto; height: auto; border-radius: 999px; font-size: .74rem;
+    padding: .2rem .6rem; margin-top: .35rem; background: var(--accent);
+    color: #fff; border: 0;
+  }
+  .card .get:disabled { background: var(--line); color: var(--dim); }
+  .divider {
+    color: var(--dim); font-size: .7rem; text-align: center;
+    text-transform: uppercase; letter-spacing: .06em; margin: .4rem 0 .6rem;
+  }
+
+  footer {
+    border-top: 1px solid var(--line); background: var(--raised);
+    padding: .5rem .6rem calc(.5rem + env(safe-area-inset-bottom));
+    display: flex; gap: .5rem; align-items: flex-end;
+  }
+  #msg {
+    flex: 1; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 18px;
+    padding: .55rem .85rem; resize: none; max-height: 7rem; min-height: 2.4rem;
+  }
+  #msg:focus { outline: none; border-color: var(--accent); }
+  button {
+    font: inherit; border: 0; border-radius: 50%; width: 2.4rem; height: 2.4rem;
+    flex: none; background: var(--accent); color: #fff; font-size: 1.2rem;
+  }
+  button.ghost { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+  button.small { width: 1.9rem; height: 1.9rem; font-size: .85rem; margin-left: .5rem; }
+  button:active { opacity: .7; }
+  #status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <span id="dot"></span>
+  <b>beamdrop</b>
+  <span id="status">connecting…</span>
+  <!-- Hidden until the portal confirms it can send notifications and the
+       browser has not already been asked. Permission can only be requested
+       from a tap, so this button is the only way in. -->
+  <button id="bell" class="ghost small" hidden aria-label="Turn on notifications">🔔</button>
+</header>
+
+<div id="feed"><div class="empty">Nothing yet — send a file or a message.</div></div>
+
+<footer>
+  <button class="ghost" id="attach" aria-label="Send a file">+</button>
+  <textarea id="msg" rows="1" placeholder="Type a message" enterkeyhint="send"></textarea>
+  <button id="send" aria-label="Send">↑</button>
+</footer>
+
+<input type="file" id="picker" multiple hidden>
+<script type="module" src="app.js"></script>
+</body>
+</html>

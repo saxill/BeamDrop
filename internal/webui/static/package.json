@@ -1,0 +1,6 @@
+{
+  "//": "Not an npm package and never installed. This file exists solely so Node treats the ESM .js files in this directory as modules: node <22.7 does not sniff module syntax, so `import { framed } from './protocol.js'` otherwise fails with \"is a CommonJS module\". Browsers ignore it — they go by the <script type=\"module\"> tag. Renaming the files to .mjs would work for node but risks the static file server handing browsers the wrong Content-Type.",
+  "name": "beamdrop-webui-static",
+  "private": true,
+  "type": "module"
+}

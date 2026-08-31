@@ -1,0 +1,9 @@
+{
+  "name": "beamdrop-crypto-vendor-build",
+  "private": true,
+  "description": "Recipe for regenerating internal/webui/static/vendor/beamdrop-crypto.mjs. Not used at runtime or at `go build` time — run manually with `npm install && npx esbuild entry.mjs --bundle --format=esm --outfile=../beamdrop-crypto.mjs` if the pinned versions below ever need bumping.",
+  "dependencies": {
+    "@noble/curves": "1.9.1",
+    "@noble/hashes": "1.8.0"
+  }
+}

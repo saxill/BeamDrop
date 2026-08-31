@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=beamdrop
+GenericName=File Transfer
+Comment=Send files and messages between your laptop and your phone
+Exec=beamdrop-app
+Icon=beamdrop
+Terminal=false
+Categories=Network;
+Keywords=file;transfer;share;phone;airdrop;tailscale;
+StartupWMClass=beamdrop-app
+StartupNotify=true

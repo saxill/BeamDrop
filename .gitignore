@@ -1,0 +1,7 @@
+.superpowers/sdd/
+/beamdrop
+.worktrees/
+dist/
+.gstack/
+__pycache__/
+*.pyc
