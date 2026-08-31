@@ -29,7 +29,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QKeySequence, QPix
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton, QScrollArea,
-    QSizePolicy, QSplitter, QVBoxLayout, QWidget,
+    QSizePolicy, QSplitter, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "beamdrop"
@@ -503,13 +503,16 @@ def direction(msg: dict) -> str:
 
 
 class Window(QWidget):
-    def __init__(self, api: Api):
+    def __init__(self, api: Api, tray: QSystemTrayIcon | None = None):
         super().__init__()
         self.api = api
+        self.tray = tray
         self.selected = ""      # peer name; "" is everyone
         self.state: dict = {}
         self.senders: list[Sender] = []
         self._feed_sig = None   # so an unchanged feed is not rebuilt
+        self._toast_ready = False  # first poll loads history silently
+        self._seen: set = set()    # incoming-item signatures already tooted
 
         self.setObjectName("root")
         self.setWindowTitle("beamdrop")
@@ -755,6 +758,7 @@ class Window(QWidget):
             self.pending_pair = None
             self.pair_wrap.hide()
 
+        self._notify_new(st)
         self.rebuild_feed(st.get("feed") or [])
 
         acts = st.get("activity") or []
@@ -774,6 +778,57 @@ class Window(QWidget):
         else:
             self.qr.hide()
             self.qr_hint.setText("Open this address on your phone")
+
+    def _notify_new(self, st: dict):
+        """Toast when something arrives. The first poll loads the whole
+        conversation history silently; only items seen after that, while the
+        window is hidden to the tray, bubble. When the window is open the
+        feed scrolling into view is already the alert, so a toast would be
+        noise."""
+        incoming = [m for m in (st.get("feed") or []) if not m.get("outbound")]
+        sig = lambda m: (m.get("at"), m.get("kind"), m.get("text"),
+                         m.get("file_name"), m.get("path"))
+        if not self._toast_ready:
+            self._toast_ready = True
+            self._seen = {sig(m) for m in incoming}
+            return
+        for m in incoming:
+            if sig(m) in self._seen:
+                continue
+            self._seen.add(sig(m))
+            self._toast(m)
+
+    def _toast(self, m: dict):
+        if self.isVisible():
+            return  # window is up; the feed scroll is the alert
+        if m.get("kind") == "text":
+            body = (m.get("text") or "").strip() or "New message"
+        else:
+            body = f"File received: {m.get('file_name') or 'unknown'}"
+        # notify-send works where Qt's tray.showMessage only lands in the
+        # notification center on this GNOME. Quirks found by testing: normal
+        # urgency is suppressed here (critical reliably pops); the icon must
+        # be a *PNG file* that this app renders from its SVG (a theme name or
+        # an SVG path is ignored/dropped); and the source icon GNOME puts in
+        # the notification's corner comes from the app's desktop entry, not
+        # from notify-send. Tagging --app-name=beamdrop makes GNOME suppress the
+        # banner entirely (routes it to the notification center) because it
+        # resolves to the running beamdrop app; the same happens for ANY app-name
+        # that maps to a registered .desktop entry. Only an unregistered alias
+        # pops, so use the oddly-cased BeamdropNotify (never given a .desktop
+        # file) and let the PNG carry the look. Qt's tray.showMessage stays as a
+        # fallback where notify-send is missing.
+        icon = Path.home() / ".local/share/beamdrop/beamdrop.png"
+        try:
+            subprocess.run(
+                ["notify-send", "--app-name=BeamdropNotify", f"--icon={icon}",
+                 "--urgency=critical", "--expire-time=10000", "beamdrop", body],
+                timeout=2, capture_output=True, text=True)
+        except (OSError, subprocess.SubprocessError):
+            tray = self.tray
+            if tray is not None and tray.isVisible():
+                tray.showMessage("beamdrop", body,
+                                 QSystemTrayIcon.MessageIcon.Information, 5000)
 
     def rebuild_feed(self, feed: list[dict]):
         if self.selected:
@@ -928,6 +983,17 @@ class Window(QWidget):
                 return
         super().keyPressEvent(e)
 
+    def closeEvent(self, e):
+        # Closing the window hides it to the tray rather than quitting, so
+        # the portal keeps running in the background and the icon stays in
+        # the panel bar to bring the window back. Only the tray's Quit (or
+        # Ctrl-C) actually exits.
+        if self.tray is not None and self.tray.isVisible():
+            self.hide()
+            e.ignore()
+            return
+        super().closeEvent(e)
+
 
 def trim_url(s: str) -> str:
     s = s.strip()
@@ -945,6 +1011,21 @@ def join_names(names: list[str]) -> str:
     return f"{names[0]} and {len(names) - 1} others"
 
 
+def tray_icon() -> QIcon:
+    """The tray icon: the installed beamdrop SVG if present, else a simple
+    generated mark so the app still has an icon on a machine that never ran
+    the installer."""
+    for p in (
+        Path.home() / ".local/share/icons/hicolor/scalable/apps/beamdrop.svg",
+        Path.home() / ".local/share/beamdrop/beamdrop.svg",
+    ):
+        if p.is_file():
+            return QIcon(str(p))
+    pm = QPixmap(64, 64)
+    pm.fill(QColor("#1f6feb"))
+    return QIcon(pm)
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("beamdrop")
@@ -959,7 +1040,22 @@ def main() -> int:
                              "Check that `beamdrop` is on your PATH.")
         return 1
 
-    win = Window(api)
+    # The app lives in the tray: closing the window hides it there and the
+    # portal keeps running, so the icon stays in the panel bar to reopen.
+    app.setQuitOnLastWindowClosed(False)
+    tray = QSystemTrayIcon(tray_icon())
+    tray.setToolTip("beamdrop")
+    menu = QMenu()
+    menu.addAction("Open beamdrop", lambda: (win.show(), win.raise_(), win.activateWindow()))
+    menu.addSeparator()
+    menu.addAction("Quit", app.quit)
+    tray.setContextMenu(menu)
+    tray.activated.connect(
+        lambda reason: win.show() if reason == QSystemTrayIcon.Trigger else None
+    )
+    tray.show()
+
+    win = Window(api, tray)
     poller = Poller(api)
     poller.got.connect(win.on_state)
     poller.failed.connect(win.on_failed)
