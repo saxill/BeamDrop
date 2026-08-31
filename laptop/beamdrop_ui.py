@@ -814,20 +814,21 @@ class Window(QWidget):
         # from notify-send. Tagging --app-name=beamdrop makes GNOME suppress the
         # banner entirely (routes it to the notification center) because it
         # resolves to the running beamdrop app; the same happens for ANY app-name
-        # that maps to a registered .desktop entry. Only an unregistered alias
-        # pops, so use the oddly-cased BeamdropNotify (never given a .desktop
-        # file) and let the PNG carry the look. Qt's tray.showMessage stays as a
-        # fallback where notify-send is missing.
+        # that maps to a registered .desktop entry — and GNOME normalizes the
+        # app-name to find one, so the alias must normalize to an id nothing
+        # installs. BeamDrop → beam-drop.desktop, which no installer ever
+        # creates. Qt's tray.showMessage stays as a fallback where notify-send
+        # is missing.
         icon = Path.home() / ".local/share/beamdrop/beamdrop.png"
         try:
             subprocess.run(
-                ["notify-send", "--app-name=BeamdropNotify", f"--icon={icon}",
-                 "--urgency=critical", "--expire-time=10000", "beamdrop", body],
+                ["notify-send", "--app-name=BeamDrop", f"--icon={icon}",
+                 "--urgency=critical", "--expire-time=10000", "BeamDrop", body],
                 timeout=2, capture_output=True, text=True)
         except (OSError, subprocess.SubprocessError):
             tray = self.tray
             if tray is not None and tray.isVisible():
-                tray.showMessage("beamdrop", body,
+                tray.showMessage("BeamDrop", body,
                                  QSystemTrayIcon.MessageIcon.Information, 5000)
 
     def rebuild_feed(self, feed: list[dict]):

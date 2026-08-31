@@ -16,6 +16,16 @@ LIB_DIR="${HOME}/.local/share/beamdrop"
 mkdir -p "$BIN_DIR" "$APP_DIR" "$ICON_DIR" "$LIB_DIR"
 
 echo "building the engine…"
+# Go does not have to be pre-installed: first run installs it user-locally
+# (no sudo, nothing outside $HOME); later runs reuse ~/.local/go.
+if ! command -v go >/dev/null; then
+    if [ ! -x "${HOME}/.local/go/bin/go" ]; then
+        GO_ARCH="$(uname -m)"; case "$GO_ARCH" in x86_64) GO_ARCH=amd64;; aarch64) GO_ARCH=arm64;; esac
+        echo "go not found — installing go1.24.5 to ~/.local/go…"
+        curl -fsSL "https://go.dev/dl/go1.24.5.linux-${GO_ARCH}.tar.gz" | tar -xz -C "${HOME}/.local"
+    fi
+    export PATH="${HOME}/.local/go/bin:$PATH"
+fi
 go build -o "$BIN_DIR/beamdrop" ./cmd/beamdrop
 
 echo "installing the window…"
@@ -67,6 +77,17 @@ sed "s|^Icon=.*|Icon=$LIB_DIR/beamdrop.png|" \
 update-desktop-database "$APP_DIR" 2>/dev/null || true
 gtk-update-icon-cache -f -t "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
 
+echo "deploying the relay (raspberry-pi/deploy.sh; --no-pi skips this)…"
+if [ "${1:-}" = "--no-pi" ]; then
+    echo "skipped (--no-pi)."
+else
+    if ! ./raspberry-pi/deploy.sh; then
+        echo
+        echo "The laptop app is installed and working; only the relay deploy"
+        echo "was skipped. Re-run packaging/install.sh when the Pi is on."
+    fi
+fi
+
 cat <<DONE
 
 installed:
@@ -76,6 +97,7 @@ installed:
   $APP_DIR/beamdrop.desktop  menu entry
   $ICON_DIR/beamdrop.svg     icon
   $LIB_DIR/beamdrop.png      rendered icon (menu entry + notifications)
+  relay                      arm64 binary + systemd unit on the Pi, restarted
 
 Search for "beamdrop" in your applications menu, or run: beamdrop-app
 DONE

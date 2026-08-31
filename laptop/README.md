@@ -14,7 +14,10 @@ loopback API.
 ## Install
 
 The common `packaging/install.sh` (repo root) installs the Go binary, this
-app, its venv, a menu entry and an icon — all user-local, no sudo.
+app, its venv, a menu entry and an icon — all user-local, no sudo — and
+then deploys the relay to the Pi (`--no-pi` skips that half). Neither Go
+nor anything else needs to be pre-installed: a missing Go toolchain is
+installed user-locally to `~/.local/go` on the first run.
 
 ## How the laptop reaches the phone
 
