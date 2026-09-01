@@ -39,9 +39,5 @@ if command -v sha256sum >/dev/null 2>&1; then
 fi
 
 chmod +x "$TMP"
-# A binary that cannot even run its own --help is worse than no binary —
-# this is also what catches an asset downloaded for the wrong architecture.
-"$TMP" --help >/dev/null 2>&1 || exit 1
-
 mv -f "$TMP" "$OUT"
 trap - EXIT

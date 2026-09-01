@@ -27,8 +27,13 @@ case "$(uname -s):$(uname -m)" in
 esac
 ENGINE_OK=0
 if [ -n "$ENGINE_ARCH" ] && ./packaging/fetch-release.sh "$ENGINE_ARCH" "$BIN_DIR/beamdrop" 2>/dev/null; then
-    echo "engine: prebuilt ${ENGINE_ARCH} binary from the latest GitHub release."
-    ENGINE_OK=1
+    # The checksum guarantees integrity; running it guarantees the asset
+    # was for this architecture — fetch-release cannot sanity-run a
+    # cross-arch file, which is why the check lives here and not there.
+    if "$BIN_DIR/beamdrop" --help >/dev/null 2>&1; then
+        echo "engine: prebuilt ${ENGINE_ARCH} binary from the latest GitHub release."
+        ENGINE_OK=1
+    fi
 fi
 if [ "$ENGINE_OK" -ne 1 ]; then
     echo "engine: building from source…"
@@ -96,13 +101,16 @@ update-desktop-database "$APP_DIR" 2>/dev/null || true
 gtk-update-icon-cache -f -t "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
 
 echo "deploying the relay (raspberry-pi/deploy.sh; --no-pi skips this)…"
+RELAY_LINE="relay                      deployed to the always-on machine, service restarted"
 if [ "${1:-}" = "--no-pi" ]; then
     echo "skipped (--no-pi)."
+    RELAY_LINE=""
 else
     if ! ./raspberry-pi/deploy.sh; then
         echo
         echo "The laptop app is installed and working; only the relay deploy"
         echo "was skipped. Re-run packaging/install.sh when the Pi is on."
+        RELAY_LINE=""
     fi
 fi
 
@@ -115,7 +123,11 @@ installed:
   $APP_DIR/beamdrop.desktop  menu entry
   $ICON_DIR/beamdrop.svg     icon
   $LIB_DIR/beamdrop.png      rendered icon (menu entry + notifications)
-  relay                      arm64 binary + systemd unit on the Pi, restarted
+DONE
+if [ -n "$RELAY_LINE" ]; then
+    echo "  $RELAY_LINE"
+fi
+cat <<DONE
 
 Search for "beamdrop" in your applications menu, or run: beamdrop-app
 DONE
