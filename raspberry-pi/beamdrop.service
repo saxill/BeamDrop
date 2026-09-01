@@ -4,7 +4,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=%h/beamdrop portal --relay --relay-to laptop
+# __RELAY_TO__ is not a literal: deploy.sh replaces it with the hostname of
+# the laptop that ran the deploy — the name a portal presents on the wire
+# is its hostname, so the relay forwards to whoever deployed it.
+ExecStart=%h/beamdrop portal --relay --relay-to __RELAY_TO__
 Restart=always
 RestartSec=5
 

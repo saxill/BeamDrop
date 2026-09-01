@@ -13,11 +13,12 @@ loopback API.
 
 ## Install
 
-The common `packaging/install.sh` (repo root) installs the Go binary, this
-app, its venv, a menu entry and an icon — all user-local, no sudo — and
-then deploys the relay to the Pi (`--no-pi` skips that half). Neither Go
-nor anything else needs to be pre-installed: a missing Go toolchain is
-installed user-locally to `~/.local/go` on the first run.
+The common `packaging/install.sh` (repo root) installs the engine — a
+prebuilt binary from the project's GitHub releases when one matches this
+machine, built from source otherwise — then this app, its venv, a menu
+entry and an icon, all user-local, no sudo. It then deploys the relay to
+the Pi (`--no-pi` skips that half); see `raspberry-pi/README.md` for what
+that first run asks and everything it does unattended afterwards.
 
 ## How the laptop reaches the phone
 

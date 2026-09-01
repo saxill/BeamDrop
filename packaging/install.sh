@@ -15,18 +15,36 @@ LIB_DIR="${HOME}/.local/share/beamdrop"
 
 mkdir -p "$BIN_DIR" "$APP_DIR" "$ICON_DIR" "$LIB_DIR"
 
-echo "building the engine…"
-# Go does not have to be pre-installed: first run installs it user-locally
-# (no sudo, nothing outside $HOME); later runs reuse ~/.local/go.
-if ! command -v go >/dev/null; then
-    if [ ! -x "${HOME}/.local/go/bin/go" ]; then
-        GO_ARCH="$(uname -m)"; case "$GO_ARCH" in x86_64) GO_ARCH=amd64;; aarch64) GO_ARCH=arm64;; esac
-        echo "go not found — installing go1.24.5 to ~/.local/go…"
-        curl -fsSL "https://go.dev/dl/go1.24.5.linux-${GO_ARCH}.tar.gz" | tar -xz -C "${HOME}/.local"
-    fi
-    export PATH="${HOME}/.local/go/bin:$PATH"
+echo "installing the engine…"
+# A prebuilt binary from this repo's releases when one matches this
+# machine; built from source otherwise. The fetch verifies checksums and
+# sanity-runs the binary, and any failure falls through to the build —
+# so the download can only ever save time, never break an install.
+case "$(uname -s):$(uname -m)" in
+    Linux:x86_64)               ENGINE_ARCH="amd64" ;;
+    Linux:aarch64|Linux:arm64) ENGINE_ARCH="arm64" ;;
+    *)                          ENGINE_ARCH="" ;;
+esac
+ENGINE_OK=0
+if [ -n "$ENGINE_ARCH" ] && ./packaging/fetch-release.sh "$ENGINE_ARCH" "$BIN_DIR/beamdrop" 2>/dev/null; then
+    echo "engine: prebuilt ${ENGINE_ARCH} binary from the latest GitHub release."
+    ENGINE_OK=1
 fi
-go build -o "$BIN_DIR/beamdrop" ./cmd/beamdrop
+if [ "$ENGINE_OK" -ne 1 ]; then
+    echo "engine: building from source…"
+    # Go does not have to be pre-installed: first run installs it
+    # user-locally (no sudo, nothing outside $HOME); later runs reuse it.
+    if ! command -v go >/dev/null; then
+        if [ ! -x "${HOME}/.local/go/bin/go" ]; then
+            GO_ARCH="$(uname -m)"; case "$GO_ARCH" in x86_64) GO_ARCH=amd64;; aarch64|arm64) GO_ARCH=arm64;; esac
+            mkdir -p "${HOME}/.local"
+            echo "go not found — installing go1.24.5 to ~/.local/go…"
+            curl -fsSL "https://go.dev/dl/go1.24.5.linux-${GO_ARCH}.tar.gz" | tar -xz -C "${HOME}/.local"
+        fi
+        export PATH="${HOME}/.local/go/bin:$PATH"
+    fi
+    go build -o "$BIN_DIR/beamdrop" ./cmd/beamdrop
+fi
 
 echo "installing the window…"
 # Qt lives in its own venv rather than being asked of the system Python:

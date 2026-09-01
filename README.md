@@ -4,9 +4,69 @@ Send files between your laptop and your iPhone over a custom binary
 protocol, on your own machines, with nobody else in the path.
 
 One Go binary. Works on the same WiFi, and over [Tailscale](https://tailscale.com)
-when the phone is on cellular and the laptop is behind NAT. No accounts, no
-relay server, no port forwarding, no native app — the phone side is a web
-page the laptop serves.
+when the phone is on cellular and the laptop is behind NAT. No third-party
+service, no port forwarding, no native app — the phone side is a web page
+the laptop serves, and the relay is a machine you own.
+
+## What you need
+
+- a [Tailscale](https://tailscale.com) tailnet — it is the network *and*
+  the security boundary (see below)
+- a Linux laptop to send from and receive on
+- any always-on Linux box for the relay — a Raspberry Pi is the norm;
+  x86_64 works identically
+- an iPhone (the phone side is a web page, so any modern browser works,
+  but the polish is iOS-shaped)
+
+## Install
+
+From the laptop:
+
+```bash
+git clone https://github.com/saxill/BeamDrop.git
+cd BeamDrop && ./packaging/install.sh
+```
+
+One command, no sudo, everything user-local: a prebuilt engine binary from
+this repo's releases (built from source only when no release matches your
+machine), the desktop app with its own Qt venv, a menu entry, an icon —
+and then the relay deployed to your always-on machine.
+
+The first run is the only run that asks anything:
+
+- *which machine is the relay?* — your tailnet's Linux machines are
+  listed and you pick. (Later runs remember the address.)
+- *the relay's ssh password, once* — to install your key with
+  `ssh-copy-id`, after which every later run is passwordless.
+
+Two things it will not guess its way past. Ssh must be key-based after
+that first offer — that is what keeps later runs unattended. And the
+relay's user account must have *lingering* enabled: a user systemd service
+dies with its last login session, so a relay without it would stop the
+moment the deploy's ssh disconnects. The deploy enables it with
+passwordless sudo when it can, and otherwise prints the one command to
+run and stops — rather than deploy a relay that would quietly die.
+
+Pairing is not a step you perform. Your laptop dials the relay and is
+accepted; your phone opens the relay's page and is accepted; both are then
+remembered by key and never prompt again. What "accepted" means is the
+next section.
+
+## Security model
+
+**Your tailnet is the boundary.** Pairing's 6-digit code is compared by a
+human only when both ends are interactive — `beamdrop send` between two
+machines someone is sitting at. A relay running under systemd has no
+terminal and nobody to ask, so it accepts every new peer on its own: the
+code is still derived and logged with the peer's name, but nothing
+compares it. What carries the weight instead is reachability — the relay
+is only reachable from your tailnet, so "who can pair" reduces to "who is
+on my tailnet". Treat tailnet membership as full access: a paired device
+can upload, and sees the filenames of everything that has passed through.
+
+The weaker door — the Shortcuts upload endpoint — sits behind the same
+boundary plus a bearer token. Delete `upload.token` on the relay and that
+door stops being registered at all.
 
 ## Repository layout
 
@@ -24,29 +84,13 @@ The phone-facing web UI is embedded into the Go binary at build time
 (`internal/webui/static/`); `Phone/` holds a working copy so the phone-side
 source has one obvious home. See `Phone/README.md` for keeping them in sync.
 
-## Quick start
+## Running it by hand
 
-```bash
-./packaging/install.sh
-```
-
-That is the whole install on the laptop: it builds the Go binary, installs
-the desktop app with its own venv, a menu entry and an icon — all
-user-local, no sudo — and then deploys the relay to the Pi as well (pass
-`--no-pi` for just the laptop). Nothing has to be pre-installed: if Go is
-missing it is installed to `~/.local/go` first, and the relay's systemd
-unit is created and enabled on the Pi. If the Pi is off, the laptop half
-still completes and the message says so — rerun when the Pi is back.
-
-Developers who want just the binary:
+No installer, no relay — just the binary and a phone on the same network
+or tailnet:
 
 ```bash
 go build -o beamdrop ./cmd/beamdrop
-```
-
-Run the portal on the laptop:
-
-```bash
 ./beamdrop portal
 ```
 
@@ -305,37 +349,44 @@ relay holds the only copy.
 ./raspberry-pi/deploy.sh           # from the laptop, in the repo
 ```
 
-That one command builds the arm64 binary (Go need not be pre-installed —
-same user-local bootstrap as the installer), copies it across under a temp
-name so the running binary is never half-written, installs the systemd unit
-if it is the first deploy, restarts the service and verifies the relay
-actually answers on HTTP. The target is the argument (`user@host`), or
-`$PI_HOST`, or the host already in `~/.config/beamdrop/relay.addr` — the
-same address the laptop app dials, so the two can never drift apart. It is
-also what `packaging/install.sh` runs at the end of every install.
+It resolves the relay in order: the argument (`user@host`), `$PI_HOST`, the
+host in `~/.config/beamdrop/relay.addr` — the same address the laptop app
+dials, so the two cannot drift — and, when nothing is known yet, a list of
+your tailnet's Linux machines to pick from. Then it: detects the relay's
+architecture and builds for it (or fetches the matching release binary when
+no Go toolchain is on this machine), copies it across under a temp name so
+the running binary is never half-written, renders and installs the systemd
+unit, restarts the service, and verifies the relay actually answers on
+HTTP. `packaging/install.sh` runs this at the end of every install.
 
-Prerequisites it does not do for you:
+It handles the two classic traps itself:
 
-- the Pi is on your tailnet (`tailscale up`), and ssh to it is key-based
-  (`ssh-copy-id`), so the script never stops for a password;
-- `sudo loginctl enable-linger $USER` on the Pi, once, so the user service
-  runs without you logged in (deploy.sh cannot sudo on your behalf).
+- **ssh.** If the key is not installed yet it offers to run `ssh-copy-id`
+  once (you type the relay's password one time), then proceeds. Every
+  later run is passwordless.
+- **lingering.** It checks `loginctl`, enables lingering with passwordless
+  sudo when it can, and otherwise prints the one command to run and stops
+  — a user service without linger dies with the ssh session that deployed
+  it, after passing every check.
 
-It deploys this unit (`raspberry-pi/beamdrop.service`):
+The only real prerequisites: the box runs Linux, is on your tailnet, and
+you can sudo on it once.
+
+The unit it ships is rendered per deploy — the template in
+`raspberry-pi/beamdrop.service` has a `__RELAY_TO__` placeholder that
+becomes the *deploying laptop's* hostname, because that is the name its
+portal presents on the wire:
 
 ```ini
 [Service]
-ExecStart=%h/beamdrop portal --relay --relay-to my-laptop
+ExecStart=%h/beamdrop portal --relay --relay-to <deploying-laptop>
 Restart=always
 ```
 
 The upload token the phone's shortcut needs is generated by the portal
-itself on first run (`~/.config/beamdrop/upload.token` on the Pi).
-
-Then pair the laptop to the relay once (`beamdrop send` any file from the
-laptop, confirm the code on the Pi), so the relay knows where to forward.
-Point the phone's shortcut at the Pi's tailnet address and add the
-`X-Beamdrop-To` header naming the laptop.
+itself on first run (`~/.config/beamdrop/upload.token` on the Pi). With
+`--relay-to` pointing at your laptop, a phone upload with no destination
+header lands on the laptop; `X-Beamdrop-To` overrides per upload.
 
 ## How it works
 
